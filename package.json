@@ -15,7 +15,7 @@
     "test:rules": "firebase emulators:exec --only firestore \"jest --runInBand tests/firestore.rules.test.ts\"",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
-    "test:ci": "jest --ci --passWithNoTests",
+    "test:ci": "jest --ci --passWithNoTests --testPathIgnorePatterns=tests/firestore.rules.test.ts",
     "postinstall": "husky"
   },
   "engines": {
