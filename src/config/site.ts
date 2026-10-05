@@ -1,16 +1,7 @@
 export type SiteConfig = typeof siteConfig;
 
 export const siteConfig = {
-  name: 'Next.js Template',
-  description: 'Very simple Next.js template.',
-  navItems: [
-    {
-      label: 'Home',
-      href: '/'
-    },
-    {
-      label: 'Posts',
-      href: '/posts'
-    }
-  ]
+  name: 'Ping Target',
+  description: 'Theo dõi mục tiêu và ghi lại từng bước tiến của bạn.',
+  navItems: []
 };

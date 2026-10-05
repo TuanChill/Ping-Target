@@ -1,0 +1,121 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function targetPath(uid) {
+      return /databases/$(database)/documents/users/$(uid)/targets/primary;
+    }
+
+    function eventPath(uid, eventId) {
+      return /databases/$(database)/documents/users/$(uid)/targets/primary/decrements/$(eventId);
+    }
+
+    function validTarget(data) {
+      return data.keys().hasAll([
+          'label', 'unit', 'targetUnits', 'remainingUnits', 'createdAt', 'updatedAt', 'lastEventId'
+        ])
+        && data.keys().hasOnly([
+          'label', 'unit', 'targetUnits', 'remainingUnits', 'createdAt', 'updatedAt', 'lastEventId'
+        ])
+        && data.label is string && data.label.size() > 0 && data.label.size() <= 80
+        && data.unit is string && data.unit.size() > 0 && data.unit.size() <= 24
+        && data.targetUnits is int && data.targetUnits > 0
+        && data.remainingUnits is int && data.remainingUnits >= 0
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function eventMatchesTarget(uid, eventId, previousRemaining, nextRemaining) {
+      let event = getAfter(eventPath(uid, eventId)).data;
+      return event.actorUid == uid
+        && event.previousRemainingUnits == previousRemaining
+        && event.newRemainingUnits == nextRemaining
+        && event.amountUnits == previousRemaining - nextRemaining
+        && event.recordedAt == request.time;
+    }
+
+    function targetMatchesEvent(uid, eventId, data) {
+      let target = getAfter(targetPath(uid)).data;
+      return target.lastEventId == eventId
+        && target.remainingUnits == data.newRemainingUnits
+        && target.updatedAt == request.time;
+    }
+
+    function validEvent(data, uid) {
+      return data.keys().hasAll([
+          'amountUnits', 'reason', 'occurredAt', 'recordedAt',
+          'previousRemainingUnits', 'newRemainingUnits', 'actorUid'
+        ])
+        && data.keys().hasOnly([
+          'amountUnits', 'reason', 'occurredAt', 'recordedAt',
+          'previousRemainingUnits', 'newRemainingUnits', 'actorUid'
+        ])
+        && data.amountUnits is int && data.amountUnits > 0
+        && data.reason is string && data.reason.size() > 0 && data.reason.size() <= 280
+        && data.occurredAt is timestamp && data.occurredAt <= request.time
+        && data.recordedAt == request.time
+        && data.previousRemainingUnits is int && data.previousRemainingUnits >= 0
+        && data.newRemainingUnits is int && data.newRemainingUnits >= 0
+        && data.previousRemainingUnits - data.amountUnits == data.newRemainingUnits
+        && data.actorUid == uid;
+    }
+
+    match /users/{uid} {
+      allow read, write: if false;
+
+      match /targets/primary {
+        allow get: if owns(uid);
+        allow list, delete: if false;
+        allow create: if owns(uid)
+          && validTarget(request.resource.data)
+          && request.resource.data.remainingUnits == request.resource.data.targetUnits
+          && request.resource.data.lastEventId == null;
+        allow update: if owns(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'remainingUnits', 'lastEventId', 'updatedAt'
+          ])
+          && request.resource.data.remainingUnits is int
+          && request.resource.data.remainingUnits >= 0
+          && request.resource.data.remainingUnits < resource.data.remainingUnits
+          && request.resource.data.lastEventId is string
+          && request.resource.data.updatedAt == request.time
+          && eventMatchesTarget(
+            uid,
+            request.resource.data.lastEventId,
+            resource.data.remainingUnits,
+            request.resource.data.remainingUnits
+          );
+
+        match /decrements/{eventId} {
+          allow read: if owns(uid);
+          allow create: if owns(uid)
+            && validEvent(request.resource.data, uid)
+            && targetMatchesEvent(uid, eventId, request.resource.data);
+          allow update, delete: if false;
+        }
+      }
+
+      match /settings/reminders {
+        allow get: if owns(uid);
+        allow list, delete: if false;
+        allow create, update: if owns(uid)
+          && request.resource.data.keys().hasAll(['enabled', 'timezone', 'times', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['enabled', 'timezone', 'times', 'updatedAt'])
+          && request.resource.data.enabled is bool
+          && request.resource.data.timezone is string
+          && request.resource.data.timezone.size() > 0
+          && request.resource.data.timezone.size() <= 64
+          && request.resource.data.times is list
+          && request.resource.data.times.size() <= 24
+          && request.resource.data.updatedAt == request.time;
+      }
+
+      match /notificationRuns/{runId} {
+        allow read, write: if false;
+      }
+    }
+  }
+}
