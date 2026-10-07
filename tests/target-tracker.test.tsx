@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { useFirebaseAuth } from '@/providers/firebase-auth-provider';
 import {
   recordAchievement,
+  resetTarget,
   saveReminderSettings,
   subscribeHistory,
   subscribeReminderSettings,
@@ -19,6 +20,7 @@ jest.mock('@/providers/firebase-auth-provider', () => ({
 jest.mock('@/services/firebase/target.service', () => ({
   createTarget: jest.fn(),
   recordAchievement: jest.fn(),
+  resetTarget: jest.fn(),
   saveReminderSettings: jest.fn(),
   subscribeHistory: jest.fn(),
   subscribeReminderSettings: jest.fn(),
@@ -35,6 +37,7 @@ const subscribeTargetMock = jest.mocked(subscribeTarget);
 const subscribeHistoryMock = jest.mocked(subscribeHistory);
 const subscribeReminderSettingsMock = jest.mocked(subscribeReminderSettings);
 const recordAchievementMock = jest.mocked(recordAchievement);
+const resetTargetMock = jest.mocked(resetTarget);
 const saveReminderSettingsMock = jest.mocked(saveReminderSettings);
 
 describe('target tracker', () => {
@@ -69,9 +72,13 @@ describe('target tracker', () => {
       return () => undefined;
     });
     recordAchievementMock.mockResolvedValue('event-id');
+    resetTargetMock.mockResolvedValue('reset-event-id');
   });
 
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
 
   it('shows the persisted target summary and records a valid achievement', async () => {
     const user = userEvent.setup();
@@ -109,5 +116,16 @@ describe('target tracker', () => {
       times: ['09:00', '20:30']
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Đã lưu lịch nhắc');
+  });
+
+  it('confirms before resetting shared progress', async () => {
+    const user = userEvent.setup();
+    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<TargetTracker />);
+
+    await user.click(await screen.findByRole('button', { name: 'Đặt lại từ đầu' }));
+
+    await waitFor(() => expect(resetTargetMock).toHaveBeenCalledWith('private-browser-user'));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Mọi khách truy cập'));
   });
 });

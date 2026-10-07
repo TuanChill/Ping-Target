@@ -11,6 +11,7 @@ export type Target = {
 };
 
 export type DecrementEvent = {
+  kind?: 'decrement';
   amountUnits: number;
   reason: string;
   occurredAt: Timestamp;
@@ -27,4 +28,12 @@ export type ReminderSettings = {
   updatedAt?: Timestamp;
 };
 
-export type DecrementHistoryEntry = DecrementEvent & { id: string };
+export type TargetResetEvent = {
+  kind: 'reset';
+  previousRemainingUnits: number;
+  newRemainingUnits: number;
+  recordedAt: Timestamp;
+  actorUid: string;
+};
+
+export type DecrementHistoryEntry = (DecrementEvent | TargetResetEvent) & { id: string };

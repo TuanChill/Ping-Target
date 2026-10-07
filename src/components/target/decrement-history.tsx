@@ -1,14 +1,15 @@
 'use client';
 
 import type { DecrementHistoryEntry } from '@/types/target';
-import { ArrowDownRight, Clock3 } from 'lucide-react';
+import type { Timestamp } from 'firebase/firestore';
+import { ArrowDownRight, Clock3, RotateCcw } from 'lucide-react';
 
 type DecrementHistoryProps = {
   entries: DecrementHistoryEntry[];
   unit: string;
 };
 
-function formatDate(value: DecrementHistoryEntry['occurredAt']): string {
+function formatDate(value: Timestamp): string {
   return new Intl.DateTimeFormat('vi-VN', {
     dateStyle: 'medium',
     timeStyle: 'short'
@@ -39,20 +40,40 @@ export function DecrementHistory({ entries, unit }: DecrementHistoryProps) {
         <ol className="divide-y divide-stone-100">
           {entries.map((entry) => (
             <li key={entry.id} className="flex gap-3 px-5 py-4 sm:gap-4 sm:px-6">
-              <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-700">
-                <ArrowDownRight size={17} aria-hidden="true" />
+              <span
+                className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full ${
+                  entry.kind === 'reset'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-emerald-50 text-emerald-700'
+                }`}
+              >
+                {entry.kind === 'reset' ? (
+                  <RotateCcw size={16} aria-hidden="true" />
+                ) : (
+                  <ArrowDownRight size={17} aria-hidden="true" />
+                )}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <p className="font-semibold tabular-nums text-stone-900">
-                    −{entry.amountUnits.toLocaleString('vi-VN')} {unit}
+                    {entry.kind === 'reset'
+                      ? 'Đặt lại target về ban đầu'
+                      : `−${entry.amountUnits.toLocaleString('vi-VN')} ${unit}`}
                   </p>
-                  <time className="text-xs text-stone-500">{formatDate(entry.occurredAt)}</time>
+                  <time className="text-xs text-stone-500">
+                    {formatDate(entry.kind === 'reset' ? entry.recordedAt : entry.occurredAt)}
+                  </time>
                 </div>
-                <p className="mt-1 break-words text-sm leading-6 text-stone-600">{entry.reason}</p>
                 <p className="mt-1 text-xs text-stone-400">
-                  Còn {entry.newRemainingUnits.toLocaleString('vi-VN')} {unit} sau lần này
+                  {entry.kind === 'reset'
+                    ? `Lịch sử trước đó được giữ; bắt đầu lại với ${entry.newRemainingUnits.toLocaleString('vi-VN')} ${unit}.`
+                    : entry.reason}
                 </p>
+                {entry.kind !== 'reset' && (
+                  <p className="mt-1 text-xs text-stone-400">
+                    Còn {entry.newRemainingUnits.toLocaleString('vi-VN')} {unit} sau lần này
+                  </p>
+                )}
               </div>
             </li>
           ))}

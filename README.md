@@ -82,7 +82,7 @@ One minutely Worker trigger makes about 1,440 scheduled calls per day. Cloudflar
 
 ## Data model and privacy
 
-The shared target is `app/primary`; reminder settings are `app/reminders`; immutable achievement events are stored under `app/primary/decrements`. Every signed-in anonymous visitor can read and update the shared target and reminder schedule. A Firestore transaction writes each event and lowers the remaining total together; Rules reject incomplete or mismatched writes. The server reminder route reads these fixed paths and does not accept a UID or target value from the incoming request. Existing UID-scoped data is retained as a rollback copy when migrated.
+The shared target is `app/primary`; reminder settings are `app/reminders`; immutable achievement and reset events are stored under `app/primary/decrements`. Every signed-in anonymous visitor can read and update the shared target and reminder schedule. A Firestore transaction writes each achievement or reset event together with its matching target update; Rules reject incomplete or mismatched writes. Resetting restores the remaining total to the target amount for every visitor, adds a reset marker to history, and keeps earlier events. The server reminder route reads these fixed paths and does not accept a UID or target value from the incoming request. Existing UID-scoped data is retained as a rollback copy when migrated.
 
 The deployed URL itself is reachable by anyone who has it, and every visitor can view or change the shared tracker. This is not a login system. Do not put sensitive personal information in the target label or history reasons.
 

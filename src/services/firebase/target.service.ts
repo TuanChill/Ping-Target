@@ -2,7 +2,8 @@ import type {
   DecrementEvent,
   DecrementHistoryEntry,
   ReminderSettings,
-  Target
+  Target,
+  TargetResetEvent
 } from '@/types/target';
 import {
   collection,
@@ -105,6 +106,7 @@ export async function recordAchievement(
 
       const newRemainingUnits = target.remainingUnits - input.amountUnits;
       const event: DecrementEvent = {
+        kind: 'decrement',
         amountUnits: input.amountUnits,
         reason,
         occurredAt: Timestamp.fromDate(input.occurredAt),
@@ -132,6 +134,45 @@ export async function recordAchievement(
   }
 }
 
+export async function resetTarget(uid: string): Promise<string> {
+  const parentRef = targetRef(uid);
+  const eventRef = doc(collection(parentRef, 'decrements'));
+  const eventId = eventRef.id;
+
+  try {
+    await runTransaction(firestore(), async (transaction) => {
+      const targetSnapshot = await transaction.get(parentRef);
+      if (!targetSnapshot.exists()) throw new Error('Chưa thiết lập mục tiêu.');
+
+      const target = targetSnapshot.data() as Target;
+      if (target.remainingUnits >= target.targetUnits) {
+        throw new Error('Mục tiêu đã ở trạng thái ban đầu.');
+      }
+
+      const event: TargetResetEvent = {
+        kind: 'reset',
+        previousRemainingUnits: target.remainingUnits,
+        newRemainingUnits: target.targetUnits,
+        recordedAt: Timestamp.now(),
+        actorUid: uid
+      };
+
+      transaction.set(eventRef, { ...event, recordedAt: serverTimestamp() });
+      transaction.update(parentRef, {
+        remainingUnits: target.targetUnits,
+        lastEventId: eventId,
+        updatedAt: serverTimestamp()
+      });
+    });
+
+    return eventId;
+  } catch (error) {
+    const eventSnapshot = await getDoc(eventRef).catch(() => null);
+    if (eventSnapshot?.exists()) return eventId;
+    throw error;
+  }
+}
+
 export function subscribeHistory(
   uid: string,
   onValue: (entries: DecrementHistoryEntry[]) => void,
@@ -147,7 +188,10 @@ export function subscribeHistory(
     historyQuery,
     (snapshot) =>
       onValue(
-        snapshot.docs.map((entry) => ({ id: entry.id, ...(entry.data() as DecrementEvent) }))
+        snapshot.docs.map((entry) => ({
+          id: entry.id,
+          ...(entry.data() as DecrementEvent | TargetResetEvent)
+        }))
       ),
     onError
   );

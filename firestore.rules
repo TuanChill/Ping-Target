@@ -29,8 +29,15 @@ service cloud.firestore {
       return event.actorUid == request.auth.uid
         && event.previousRemainingUnits == previousRemaining
         && event.newRemainingUnits == nextRemaining
-        && event.amountUnits == previousRemaining - nextRemaining
-        && event.recordedAt == request.time;
+        && event.recordedAt == request.time
+        && (
+          event.get('kind', 'decrement') == 'reset'
+            ? nextRemaining == getAfter(targetPath()).data.targetUnits
+              && previousRemaining < nextRemaining
+            : event.get('kind', 'decrement') == 'decrement'
+              && event.amountUnits == previousRemaining - nextRemaining
+              && nextRemaining < previousRemaining
+        );
     }
 
     function targetMatchesEvent(eventId, data) {
@@ -40,15 +47,17 @@ service cloud.firestore {
         && target.updatedAt == request.time;
     }
 
-    function validEvent(data) {
+    function validDecrementEvent(data) {
       return data.keys().hasAll([
           'amountUnits', 'reason', 'occurredAt', 'recordedAt',
           'previousRemainingUnits', 'newRemainingUnits', 'actorUid'
-        ])
+      ])
         && data.keys().hasOnly([
+          'kind',
           'amountUnits', 'reason', 'occurredAt', 'recordedAt',
           'previousRemainingUnits', 'newRemainingUnits', 'actorUid'
         ])
+        && data.get('kind', 'decrement') == 'decrement'
         && data.amountUnits is int && data.amountUnits > 0
         && data.reason is string && data.reason.size() > 0 && data.reason.size() <= 280
         && data.occurredAt is timestamp && data.occurredAt <= request.time
@@ -57,6 +66,24 @@ service cloud.firestore {
         && data.newRemainingUnits is int && data.newRemainingUnits >= 0
         && data.previousRemainingUnits - data.amountUnits == data.newRemainingUnits
         && data.actorUid == request.auth.uid;
+    }
+
+    function validResetEvent(data) {
+      return data.keys().hasAll([
+          'kind', 'recordedAt', 'previousRemainingUnits', 'newRemainingUnits', 'actorUid'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'recordedAt', 'previousRemainingUnits', 'newRemainingUnits', 'actorUid'
+        ])
+        && data.kind == 'reset'
+        && data.recordedAt == request.time
+        && data.previousRemainingUnits is int && data.previousRemainingUnits >= 0
+        && data.newRemainingUnits is int && data.newRemainingUnits > data.previousRemainingUnits
+        && data.actorUid == request.auth.uid;
+    }
+
+    function validEvent(data) {
+      return validDecrementEvent(data) || validResetEvent(data);
     }
 
     match /app/{documentId} {
@@ -76,7 +103,6 @@ service cloud.firestore {
         ])
         && request.resource.data.remainingUnits is int
         && request.resource.data.remainingUnits >= 0
-        && request.resource.data.remainingUnits < resource.data.remainingUnits
         && request.resource.data.lastEventId is string
         && request.resource.data.updatedAt == request.time
         && eventMatchesTarget(
