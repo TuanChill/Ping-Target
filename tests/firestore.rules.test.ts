@@ -112,7 +112,7 @@ describe('Firestore target rules', () => {
     await assertFails(updateDoc(eventRef, { reason: 'Sửa lịch sử' }));
   });
 
-  it('allows a matching reset event and rejects a balance-only reset', async () => {
+  it('allows a new target setup through a matching reset event and rejects a partial reset', async () => {
     await seedTarget(9);
     const db = testEnvironment.authenticatedContext('visitor').firestore();
     const targetRef = doc(db, 'app', 'primary');
@@ -120,7 +120,8 @@ describe('Firestore target rules', () => {
 
     await assertFails(
       updateDoc(targetRef, {
-        remainingUnits: 12,
+        targetUnits: 7,
+        remainingUnits: 7,
         lastEventId: 'reset-one',
         updatedAt: serverTimestamp()
       })
@@ -134,11 +135,19 @@ describe('Firestore target rules', () => {
           kind: 'reset',
           recordedAt: serverTimestamp(),
           previousRemainingUnits,
-          newRemainingUnits: 12,
+          newRemainingUnits: 7,
+          previousLabel: 'Mục tiêu',
+          newLabel: 'Đi bộ',
+          previousUnit: 'km',
+          newUnit: 'km',
+          previousTargetUnits: 12,
+          newTargetUnits: 7,
           actorUid: 'visitor'
         });
         transaction.update(targetRef, {
-          remainingUnits: 12,
+          label: 'Đi bộ',
+          targetUnits: 7,
+          remainingUnits: 7,
           lastEventId: 'reset-one',
           updatedAt: serverTimestamp()
         });
@@ -147,7 +156,9 @@ describe('Firestore target rules', () => {
 
     await assertFails(updateDoc(eventRef, { newRemainingUnits: 10 }));
     const target = await getDoc(targetRef);
-    expect(target.data()?.remainingUnits).toBe(12);
+    expect(target.data()?.remainingUnits).toBe(7);
+    expect(target.data()?.targetUnits).toBe(7);
+    expect(target.data()?.label).toBe('Đi bộ');
   });
 
   it('lets any signed-in visitor create the one shared target once', async () => {

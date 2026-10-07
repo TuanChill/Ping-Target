@@ -118,14 +118,50 @@ describe('target tracker', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Đã lưu lịch nhắc');
   });
 
-  it('confirms before resetting shared progress', async () => {
+  it('shows the setup-again action even when the target has no progress', async () => {
+    subscribeTargetMock.mockImplementation((_uid, onValue) => {
+      onValue({
+        label: 'Đọc sách',
+        unit: 'trang',
+        targetUnits: 100,
+        remainingUnits: 100,
+        createdAt: {} as never,
+        updatedAt: {} as never,
+        lastEventId: null
+      });
+
+      return () => undefined;
+    });
+    const user = userEvent.setup();
+    render(<TargetTracker />);
+
+    await user.click(await screen.findByRole('button', { name: 'Thiết lập lại target' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Thiết lập lại mục tiêu' })
+    ).toBeInTheDocument();
+  });
+
+  it('lets visitors set up a new shared target and confirms before resetting', async () => {
     const user = userEvent.setup();
     const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
     render(<TargetTracker />);
 
-    await user.click(await screen.findByRole('button', { name: 'Đặt lại từ đầu' }));
+    await user.click(await screen.findByRole('button', { name: 'Thiết lập lại target' }));
+    expect(screen.getByLabelText('Tên mục tiêu')).toHaveValue('Đọc sách');
+    expect(screen.getByLabelText('Con số cần đạt')).toHaveValue(100);
+    expect(screen.getByLabelText('Đơn vị')).toHaveValue('trang');
+    await user.clear(screen.getByLabelText('Con số cần đạt'));
+    await user.type(screen.getByLabelText('Con số cần đạt'), '80');
+    await user.click(screen.getByRole('button', { name: 'Đặt lại và bắt đầu' }));
 
-    await waitFor(() => expect(resetTargetMock).toHaveBeenCalledWith('private-browser-user'));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Mọi khách truy cập'));
+    await waitFor(() =>
+      expect(resetTargetMock).toHaveBeenCalledWith('private-browser-user', {
+        label: 'Đọc sách',
+        unit: 'trang',
+        targetUnits: 80
+      })
+    );
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('80 trang'));
   });
 });

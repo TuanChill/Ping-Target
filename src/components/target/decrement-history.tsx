@@ -57,8 +57,8 @@ export function DecrementHistory({ entries, unit }: DecrementHistoryProps) {
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <p className="font-semibold tabular-nums text-stone-900">
                     {entry.kind === 'reset'
-                      ? 'Đặt lại target về ban đầu'
-                      : `−${entry.amountUnits.toLocaleString('vi-VN')} ${unit}`}
+                      ? 'Thiết lập lại target'
+                      : `−${entry.amountUnits.toLocaleString('vi-VN')} ${entry.unit ?? unit}`}
                   </p>
                   <time className="text-xs text-stone-500">
                     {formatDate(entry.kind === 'reset' ? entry.recordedAt : entry.occurredAt)}
@@ -66,12 +66,15 @@ export function DecrementHistory({ entries, unit }: DecrementHistoryProps) {
                 </div>
                 <p className="mt-1 text-xs text-stone-400">
                   {entry.kind === 'reset'
-                    ? `Lịch sử trước đó được giữ; bắt đầu lại với ${entry.newRemainingUnits.toLocaleString('vi-VN')} ${unit}.`
+                    ? entry.newTargetUnits
+                      ? `Đổi từ ${entry.previousTargetUnits?.toLocaleString('vi-VN')} ${entry.previousUnit ?? unit} sang ${entry.newLabel ?? 'mục tiêu'} — ${entry.newTargetUnits.toLocaleString('vi-VN')} ${entry.newUnit ?? unit}; lịch sử cũ được giữ.`
+                      : `Lịch sử trước đó được giữ; bắt đầu lại với ${entry.newRemainingUnits.toLocaleString('vi-VN')} ${unit}.`
                     : entry.reason}
                 </p>
                 {entry.kind !== 'reset' && (
                   <p className="mt-1 text-xs text-stone-400">
-                    Còn {entry.newRemainingUnits.toLocaleString('vi-VN')} {unit} sau lần này
+                    Còn {entry.newRemainingUnits.toLocaleString('vi-VN')} {entry.unit ?? unit} sau
+                    lần này
                   </p>
                 )}
               </div>

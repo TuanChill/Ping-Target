@@ -12,6 +12,7 @@ export type Target = {
 
 export type DecrementEvent = {
   kind?: 'decrement';
+  unit?: string;
   amountUnits: number;
   reason: string;
   occurredAt: Timestamp;
@@ -30,6 +31,12 @@ export type ReminderSettings = {
 
 export type TargetResetEvent = {
   kind: 'reset';
+  previousLabel?: string;
+  newLabel?: string;
+  previousUnit?: string;
+  newUnit?: string;
+  previousTargetUnits?: number;
+  newTargetUnits?: number;
   previousRemainingUnits: number;
   newRemainingUnits: number;
   recordedAt: Timestamp;

@@ -107,6 +107,7 @@ export async function recordAchievement(
       const newRemainingUnits = target.remainingUnits - input.amountUnits;
       const event: DecrementEvent = {
         kind: 'decrement',
+        unit: target.unit,
         amountUnits: input.amountUnits,
         reason,
         occurredAt: Timestamp.fromDate(input.occurredAt),
@@ -134,7 +135,19 @@ export async function recordAchievement(
   }
 }
 
-export async function resetTarget(uid: string): Promise<string> {
+export async function resetTarget(
+  uid: string,
+  input: { label: string; unit: string; targetUnits: number }
+): Promise<string> {
+  const label = input.label.trim();
+  const unit = input.unit.trim();
+  if (!Number.isSafeInteger(input.targetUnits) || input.targetUnits <= 0) {
+    throw new Error('Mục tiêu phải là số nguyên lớn hơn 0.');
+  }
+  if (!label || label.length > 80 || !unit || unit.length > 24) {
+    throw new Error('Tên mục tiêu hoặc đơn vị không hợp lệ.');
+  }
+
   const parentRef = targetRef(uid);
   const eventRef = doc(collection(parentRef, 'decrements'));
   const eventId = eventRef.id;
@@ -145,21 +158,35 @@ export async function resetTarget(uid: string): Promise<string> {
       if (!targetSnapshot.exists()) throw new Error('Chưa thiết lập mục tiêu.');
 
       const target = targetSnapshot.data() as Target;
-      if (target.remainingUnits >= target.targetUnits) {
-        throw new Error('Mục tiêu đã ở trạng thái ban đầu.');
+      if (
+        target.label === label &&
+        target.unit === unit &&
+        target.targetUnits === input.targetUnits &&
+        target.remainingUnits === input.targetUnits
+      ) {
+        throw new Error('Thiết lập mục tiêu mới phải khác thiết lập hiện tại.');
       }
 
       const event: TargetResetEvent = {
         kind: 'reset',
+        previousLabel: target.label,
+        newLabel: label,
+        previousUnit: target.unit,
+        newUnit: unit,
+        previousTargetUnits: target.targetUnits,
+        newTargetUnits: input.targetUnits,
         previousRemainingUnits: target.remainingUnits,
-        newRemainingUnits: target.targetUnits,
+        newRemainingUnits: input.targetUnits,
         recordedAt: Timestamp.now(),
         actorUid: uid
       };
 
       transaction.set(eventRef, { ...event, recordedAt: serverTimestamp() });
       transaction.update(parentRef, {
-        remainingUnits: target.targetUnits,
+        label,
+        unit,
+        targetUnits: input.targetUnits,
+        remainingUnits: input.targetUnits,
         lastEventId: eventId,
         updatedAt: serverTimestamp()
       });

@@ -1,6 +1,7 @@
 'use client';
 
-import { createTarget } from '@/services/firebase/target.service';
+import { createTarget, resetTarget } from '@/services/firebase/target.service';
+import type { Target } from '@/types/target';
 import { FormEvent, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -9,21 +10,34 @@ import { Input } from '@/components/ui/input';
 type TargetSetupFormProps = {
   uid: string;
   onCreated: () => void;
+  currentTarget?: Target;
+  onCancel?: () => void;
 };
 
-export function TargetSetupForm({ uid, onCreated }: TargetSetupFormProps) {
-  const [label, setLabel] = useState('Mục tiêu của tôi');
-  const [unit, setUnit] = useState('lần');
-  const [target, setTarget] = useState('');
+export function TargetSetupForm({ uid, onCreated, currentTarget, onCancel }: TargetSetupFormProps) {
+  const [label, setLabel] = useState(currentTarget?.label ?? 'Mục tiêu của tôi');
+  const [unit, setUnit] = useState(currentTarget?.unit ?? 'lần');
+  const [target, setTarget] = useState(currentTarget ? String(currentTarget.targetUnits) : '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const input = { label, unit, targetUnits: Number(target) };
+    if (
+      currentTarget &&
+      !window.confirm(
+        `Thiết lập lại target dùng chung thành “${label}” — ${Number(target).toLocaleString('vi-VN')} ${unit}? Mọi khách truy cập sẽ thấy thiết lập mới và tiến độ bắt đầu từ 0. Lịch sử cũ vẫn được giữ.`
+      )
+    ) {
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      await createTarget(uid, { label, unit, targetUnits: Number(target) });
+      if (currentTarget) await resetTarget(uid, input);
+      else await createTarget(uid, input);
       onCreated();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Không thể lưu mục tiêu.');
@@ -34,6 +48,11 @@ export function TargetSetupForm({ uid, onCreated }: TargetSetupFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {currentTarget && (
+        <p className="text-sm leading-6 text-stone-600">
+          Cập nhật tên, con số và đơn vị. Tiến độ sẽ bắt đầu lại từ 0, còn lịch sử cũ sẽ được giữ.
+        </p>
+      )}
       <div>
         <label htmlFor="target-label" className="mb-2 block text-sm font-medium text-stone-700">
           Tên mục tiêu
@@ -84,12 +103,19 @@ export function TargetSetupForm({ uid, onCreated }: TargetSetupFormProps) {
           {error}
         </p>
       )}
-      <Button
-        disabled={saving}
-        className="h-12 w-full rounded-xl bg-stone-950 text-white hover:bg-stone-800"
-      >
-        {saving ? 'Đang lưu…' : 'Bắt đầu theo dõi'}
-      </Button>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {onCancel && (
+          <Button type="button" variant="outline" onClick={onCancel} className="h-12 rounded-xl">
+            Hủy
+          </Button>
+        )}
+        <Button
+          disabled={saving}
+          className="h-12 flex-1 rounded-xl bg-stone-950 text-white hover:bg-stone-800"
+        >
+          {saving ? 'Đang lưu…' : currentTarget ? 'Đặt lại và bắt đầu' : 'Bắt đầu theo dõi'}
+        </Button>
+      </div>
     </form>
   );
 }

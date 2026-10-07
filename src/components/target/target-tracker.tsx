@@ -2,7 +2,6 @@
 
 import { useFirebaseAuth } from '@/providers/firebase-auth-provider';
 import {
-  resetTarget,
   subscribeHistory,
   subscribeReminderSettings,
   subscribeTarget
@@ -65,8 +64,7 @@ export function TargetTracker() {
   const [loaded, setLoaded] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [resetting, setResetting] = useState(false);
-  const [resetError, setResetError] = useState<string | null>(null);
+  const [editingSetup, setEditingSetup] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -169,24 +167,6 @@ export function TargetTracker() {
   const completedUnits = target.targetUnits - target.remainingUnits;
   const progress = Math.min(100, Math.round((completedUnits / target.targetUnits) * 100));
 
-  async function handleReset() {
-    if (!user || !target || target.remainingUnits >= target.targetUnits || resetting) return;
-    const confirmed = window.confirm(
-      'Đặt lại tiến độ dùng chung về ban đầu? Mọi khách truy cập sẽ thấy target bắt đầu lại. Lịch sử cũ vẫn được giữ.'
-    );
-    if (!confirmed) return;
-
-    setResetting(true);
-    setResetError(null);
-    try {
-      await resetTarget(user.uid);
-    } catch (error) {
-      setResetError(error instanceof Error ? error.message : 'Không thể đặt lại target.');
-    } finally {
-      setResetting(false);
-    }
-  }
-
   return (
     <main className="min-h-screen bg-[#f6f5f2] px-5 py-8 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-5xl">
@@ -256,29 +236,39 @@ export function TargetTracker() {
           />
         </div>
 
-        {completedUnits > 0 && (
-          <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-stone-600">
-              Đặt lại tiến độ cho mọi người; các lần ghi nhận cũ vẫn nằm trong lịch sử.
-            </p>
-            <div className="flex shrink-0 flex-col items-start gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-xl"
-                onClick={handleReset}
-                disabled={resetting}
-              >
-                <RotateCcw size={16} aria-hidden="true" />
-                {resetting ? 'Đang đặt lại…' : 'Đặt lại từ đầu'}
-              </Button>
-              {resetError && (
-                <p role="alert" className="text-sm text-red-700">
-                  {resetError}
-                </p>
-              )}
-            </div>
+        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-stone-600">
+            Thiết lập lại tên, con số và đơn vị mục tiêu. Mọi khách sẽ bắt đầu từ 0; lịch sử cũ vẫn
+            được giữ.
+          </p>
+          <div className="flex shrink-0 flex-col items-start gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => {
+                setEditingSetup((value) => !value);
+              }}
+            >
+              <RotateCcw size={16} aria-hidden="true" />
+              {editingSetup ? 'Đóng thiết lập' : 'Thiết lập lại target'}
+            </Button>
           </div>
+        </div>
+
+        {editingSetup && (
+          <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6">
+            <h2 className="mb-5 font-semibold text-stone-900">Thiết lập lại mục tiêu</h2>
+            <TargetSetupForm
+              uid={user.uid}
+              currentTarget={target}
+              onCreated={() => {
+                setEditingSetup(false);
+                setRefreshKey((key) => key + 1);
+              }}
+              onCancel={() => setEditingSetup(false)}
+            />
+          </section>
         )}
 
         <div className="mt-5 grid items-start gap-5 lg:grid-cols-[1.08fr_0.92fr]">
