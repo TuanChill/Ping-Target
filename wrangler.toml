@@ -3,7 +3,7 @@ main = "workers/reminder/index.ts"
 compatibility_date = "2026-10-05"
 
 [vars]
-REMINDER_ENDPOINT = "https://your-vercel-deployment.vercel.app/api/cron/target-reminder"
+REMINDER_ENDPOINT = "https://ping-target.vercel.app/api/cron/target-reminder"
 
 [triggers]
 crons = ["* * * * *"]

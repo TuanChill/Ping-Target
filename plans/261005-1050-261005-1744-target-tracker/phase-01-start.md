@@ -1,6 +1,6 @@
 ---
 phase: 1
-title: "Project and Firebase foundation"
+title: 'Project and Firebase foundation'
 status: pending
 priority: P1
 effort: 3h

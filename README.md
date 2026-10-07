@@ -1,14 +1,14 @@
 # Ping Target
 
-Ping Target is a private, single-page progress tracker. It stores one integer target in Cloud Firestore, records each achievement with a reason and timestamp, and sends configurable Telegram reminders with the current remaining amount.
+Ping Target is a shared, single-page progress tracker. It stores one global integer target in Cloud Firestore, records each achievement with a reason and timestamp, and sends configurable Telegram reminders with the current remaining amount.
 
-The app uses Firebase Anonymous Authentication, so there is no account or login screen. The anonymous Firebase identity stays in the current browser profile. Someone opening the same URL in another browser gets a separate empty tracker; clearing this browser's data loses access to its tracker.
+The app uses Firebase Anonymous Authentication only to satisfy Firestore Rules; there is no account or login screen. Every visitor sees and can update the same target, progress history, and reminder schedule. Do not store sensitive information in the target label, history reasons, or reminder settings.
 
 ## Stack
 
 - Next.js App Router on Vercel
 - Firebase Anonymous Auth and Cloud Firestore for browser data
-- Firestore Security Rules for owner-only access and paired progress/history writes
+- Firestore Security Rules for shared access and paired progress/history writes
 - A Cloudflare Worker Cron Trigger checking once each minute and calling a protected Vercel route
 - Telegram Bot API for notifications
 
@@ -57,13 +57,13 @@ pnpm test:rules
    FIREBASE_ADMIN_PROJECT_ID
    FIREBASE_ADMIN_CLIENT_EMAIL
    FIREBASE_ADMIN_PRIVATE_KEY
-   REMINDER_OWNER_UID
    CRON_SECRET
    TELEGRAM_BOT_TOKEN
    TELEGRAM_CHAT_ID
    ```
 
-   The private key value should preserve newlines or use `\n` escapes; the server module restores escaped newlines. `REMINDER_OWNER_UID` is the anonymous user ID for the browser containing your tracker. Open the app once, then copy its UID from Firebase Authentication's user list. `CRON_SECRET` must be a long random value.
+   The private key value should preserve newlines or use `\n` escapes; the server module restores escaped newlines. `CRON_SECRET` must be a long random value.
+
 4. Configure `CRON_SECRET` in Vercel. Set the same value as a Cloudflare Worker secret, then edit the Worker endpoint URL in `wrangler.toml` to your deployed Vercel URL:
 
    ```bash
@@ -82,9 +82,9 @@ One minutely Worker trigger makes about 1,440 scheduled calls per day. Cloudflar
 
 ## Data model and privacy
 
-The browser owns its data under `users/{anonymousUid}`. Each achievement event is immutable. A Firestore transaction writes the event and lowers the cached remaining total together; Rules reject incomplete or mismatched writes. The server reminder route uses the configured owner UID and does not accept a UID or target value from the incoming request.
+The shared target is `app/primary`; reminder settings are `app/reminders`; immutable achievement events are stored under `app/primary/decrements`. Every signed-in anonymous visitor can read and update the shared target and reminder schedule. A Firestore transaction writes each event and lowers the remaining total together; Rules reject incomplete or mismatched writes. The server reminder route reads these fixed paths and does not accept a UID or target value from the incoming request. Existing UID-scoped data is retained as a rollback copy when migrated.
 
-The deployed URL itself is reachable by anyone who has it. Firebase keeps each browser identity's data separate, but this is not a login system and does not prevent other people from opening the page. Do not put sensitive personal information in the target label or history reasons.
+The deployed URL itself is reachable by anyone who has it, and every visitor can view or change the shared tracker. This is not a login system. Do not put sensitive personal information in the target label or history reasons.
 
 ## Commands
 

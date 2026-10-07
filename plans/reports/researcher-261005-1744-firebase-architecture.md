@@ -24,12 +24,12 @@ must require the summary update and event create to occur atomically.
 
 ## Products and ranked alternatives
 
-| Rank | Shape | Fit | Main trade-off |
-| --- | --- | --- | --- |
-| **1** | Anonymous Auth + Firestore + App Check for production hardening | Best for a frictionless single-user tracker on a free host | Clearing browser storage loses the anonymous identity; public abuse must be controlled with App Check and quotas |
-| **2** | Google or email-link Auth + Firestore + App Check | Best if data must survive browser changes and sync across devices | Adds sign-in UX and account-recovery/product decisions |
-| 3 | Firestore events only; compute remaining by summing events in the client | Simplest Rules | No atomic materialized balance; larger history reads and weaker protection against a client creating a logically excessive event total |
-| 4 | Next.js API/Server Action + Admin SDK | Strong server authority | Violates the no-separate-backend constraint; service credentials and server deployment become required, and Admin SDK bypasses Firestore Rules |
+| Rank  | Shape                                                                    | Fit                                                               | Main trade-off                                                                                                                                 |
+| ----- | ------------------------------------------------------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | Anonymous Auth + Firestore + App Check for production hardening          | Best for a frictionless single-user tracker on a free host        | Clearing browser storage loses the anonymous identity; public abuse must be controlled with App Check and quotas                               |
+| **2** | Google or email-link Auth + Firestore + App Check                        | Best if data must survive browser changes and sync across devices | Adds sign-in UX and account-recovery/product decisions                                                                                         |
+| 3     | Firestore events only; compute remaining by summing events in the client | Simplest Rules                                                    | No atomic materialized balance; larger history reads and weaker protection against a client creating a logically excessive event total         |
+| 4     | Next.js API/Server Action + Admin SDK                                    | Strong server authority                                           | Violates the no-separate-backend constraint; service credentials and server deployment become required, and Admin SDK bypasses Firestore Rules |
 
 Firebase's modular Web SDK is explicitly the production-recommended, tree-
 shakeable API and is intended to be installed through npm/module bundlers
@@ -169,7 +169,7 @@ server timestamp, which makes the `recordedAt`/`updatedAt` checks meaningful
 ([Rules Request reference](https://firebase.google.com/docs/reference/rules/rules.firestore.Request)).
 
 The target rule must require the event's `recordedAt == request.time`; merely
-checking that `lastEventId` names *some existing* event would permit a direct
+checking that `lastEventId` names _some existing_ event would permit a direct
 balance edit that reuses an old event. Event documents must be create-only and
 the transaction must be the only path that writes the two documents.
 

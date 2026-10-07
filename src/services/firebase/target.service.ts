@@ -30,11 +30,15 @@ function firestore() {
 }
 
 function targetRef(uid: string) {
-  return doc(firestore(), 'users', uid, 'targets', 'primary');
+  if (!uid) throw new Error('Cần có phiên Firebase để truy cập mục tiêu chung.');
+
+  return doc(firestore(), 'app', 'primary');
 }
 
 function reminderRef(uid: string) {
-  return doc(firestore(), 'users', uid, 'settings', 'reminders');
+  if (!uid) throw new Error('Cần có phiên Firebase để truy cập cài đặt nhắc chung.');
+
+  return doc(firestore(), 'app', 'reminders');
 }
 
 export function subscribeTarget(

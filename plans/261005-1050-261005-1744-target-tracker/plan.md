@@ -1,6 +1,6 @@
 ---
-title: "Ping Target: Firebase tracker and Telegram reminder"
-description: "Build a private target tracker with an auditable progress ledger and configurable Telegram reminders."
+title: 'Ping Target: Firebase tracker and Telegram reminder'
+description: 'Build a shared single-target tracker with an auditable progress ledger and configurable Telegram reminders.'
 status: in-progress
 priority: P1
 effort: 18h
@@ -15,19 +15,21 @@ created: 2026-10-05
 
 ## Overview
 
-Replace the boilerplate home page with a private Firebase target tracker. A user creates one target, records a positive achievement with reason and business time, and sees the remaining number decrease with immutable history. The user configures Telegram reminder times in the app. A Cloudflare Worker Cron Trigger checks once per minute and invokes a protected Vercel route, which sends the current remaining total when a configured time is due. This is serverless: no self-managed backend.
+Replace the boilerplate home page with one shared Firebase target tracker. Any visitor can view the same target, create it if it does not exist, record a positive achievement with reason and business time, and configure the shared Telegram reminder schedule. The remaining number decreases with immutable history. A Cloudflare Worker Cron Trigger checks once per minute and invokes a protected Vercel route, which sends the current remaining total when a configured time is due. This is serverless: no self-managed backend.
 
 ## Scope and architecture
 
 - Baseline: Vercel hosts the app and protected reminder endpoint; one free Cloudflare Worker Cron Trigger runs each minute. Firestore stores user-configured reminder times and timezone, so changing a reminder needs no Worker redeploy.
-- Security: anonymous Firebase Auth creates a browser-local UID without an account/login screen. Rules isolate every UID; the owner UID, Telegram token, Firebase Admin credential, and shared scheduler secret are server-only.
-- Retention: clearing browser data or switching device loses access to the anonymous UID's target. This is accepted because the app is private to one browser and is not shared publicly.
-- Non-goals: public data sharing, accounts/sign-in UI, shared or multiple targets, history edits/deletes, manual corrections, export/import, and a self-hosted server.
+- Access: anonymous Firebase Auth is still used to satisfy Firestore Rules, but every authenticated visitor can read the shared target, append progress, and update shared reminder settings. The app intentionally has one global target and no per-user separation.
+- Secrets: Telegram token, Firebase Admin credential, and shared scheduler secret remain server-only. The cron route reads the global target/settings and no longer needs an owner UID.
+- Retention: shared Firestore data is independent of browser storage, so another browser or device sees the same target.
+- Non-goals: accounts/sign-in UI, multiple targets, history edits/deletes, manual corrections, export/import, and a self-hosted server.
 
 ```text
 Next.js Client + anonymous Firebase Auth → Firestore transaction
-                                users/{uid}/targets/primary/decrements/{eventId}
+                                app/primary/decrements/{eventId}
 Cloudflare minute Cron → protected Vercel Route Handler
+                                                    → app/primary + app/reminders
                                                     → Firebase Admin + Telegram sendMessage
 ```
 
@@ -35,17 +37,18 @@ Amounts are integers. One transaction writes an immutable event and updates `rem
 
 ## Phases
 
-| # | Phase | Status |
-|---|-------|--------|
-| 1 | [Project and Firebase foundation](./phase-01-start.md) | Pending |
-| 2 | [Secure Firestore data and authentication](./phase-02-firebase-data-auth.md) | Pending |
-| 3 | [Target dashboard and audit history](./phase-03-target-dashboard-history.md) | Pending |
-| 4 | [Telegram reminders, Worker scheduler, and deployment](./phase-04-telegram-reminders-deployment.md) | Pending |
+| #   | Phase                                                                                               | Status  |
+| --- | --------------------------------------------------------------------------------------------------- | ------- |
+| 1   | [Project and Firebase foundation](./phase-01-start.md)                                              | Pending |
+| 2   | [Secure Firestore data and authentication](./phase-02-firebase-data-auth.md)                        | Pending |
+| 3   | [Target dashboard and audit history](./phase-03-target-dashboard-history.md)                        | Pending |
+| 4   | [Telegram reminders, Worker scheduler, and deployment](./phase-04-telegram-reminders-deployment.md) | Pending |
 
 ## Acceptance criteria
 
-- [ ] The private browser session creates one target and views target, completed, and remaining values without an account/login screen.
-- [ ] A valid record atomically creates one history event and lowers remaining; invalid, excessive, cross-user, or partial writes fail.
+- [ ] Any visitor views the same single global target, completed, and remaining values without an account/login screen.
+- [ ] A valid record atomically creates one history event and lowers remaining; invalid, excessive, or partial writes fail.
+- [ ] The global target/settings/history and the cron route use the same Firestore paths.
 - [ ] History is newest first with amount, reason, business time, and audit time.
 - [ ] User can configure daily reminder times and timezone in the app; due times send the current remaining amount once per local date and time, with secrets kept server-side.
 - [ ] Rules/emulator tests, unit/component tests, lint, build, and a production-like Telegram test pass.
@@ -63,6 +66,7 @@ Amounts are integers. One transaction writes an immutable event and updates `rem
 - Amounts are whole-number integers.
 - The tracker needs multiple configurable reminder times per day; exact-minute delivery is not required.
 - There is no account/login screen and no public sharing. Anonymous Firebase Auth isolates the private browser's data; losing browser storage loses access, which is accepted.
+- Updated 2026-10-07 per owner decision: one global target is shared across all visitors; visitors may view progress, record achievements, and change the shared reminder schedule. Existing UID-scoped records are retained as a rollback copy when data is copied into the global path.
 - Free-tier baseline changed from Vercel Cron to Cloudflare Worker Cron Triggers (maximum five schedules) calling the Vercel reminder route.
 - Reminder times must be configurable in the UI, not by editing/deploying Worker cron expressions. Worker checks once per minute; Firestore stores user times/timezone and the server route enforces once-per-slot delivery.
 - Production build, lint, TypeScript, and 9 focused unit/component tests pass. The Firestore Rules emulator test is present but could not run here because the available Java is 17 and Firebase CLI requires Java 21+. Wrangler dry-run was also blocked by permissions on Wrangler's per-user config directory outside the workspace. Live deployment and Telegram delivery require the user's Firebase, Vercel, Cloudflare, and Telegram credentials.

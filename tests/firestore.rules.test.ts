@@ -37,9 +37,9 @@ afterAll(async () => {
   await testEnvironment.cleanup();
 });
 
-async function seedTarget(uid: string, remainingUnits = 12): Promise<void> {
+async function seedTarget(remainingUnits = 12): Promise<void> {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
-    await setDoc(doc(context.firestore(), 'users', uid, 'targets', 'primary'), {
+    await setDoc(doc(context.firestore(), 'app', 'primary'), {
       label: 'Mục tiêu',
       unit: 'km',
       targetUnits: 12,
@@ -52,19 +52,19 @@ async function seedTarget(uid: string, remainingUnits = 12): Promise<void> {
 }
 
 describe('Firestore target rules', () => {
-  it('denies unauthenticated access and cross-user reads', async () => {
-    await seedTarget('owner');
+  it('denies unauthenticated access and allows every signed-in visitor to read the shared target', async () => {
+    await seedTarget();
     const anonymousDb = testEnvironment.unauthenticatedContext().firestore();
     const otherUserDb = testEnvironment.authenticatedContext('other').firestore();
-    await assertFails(getDoc(doc(anonymousDb, 'users', 'owner', 'targets', 'primary')));
-    await assertFails(getDoc(doc(otherUserDb, 'users', 'owner', 'targets', 'primary')));
+    await assertFails(getDoc(doc(anonymousDb, 'app', 'primary')));
+    await assertSucceeds(getDoc(doc(otherUserDb, 'app', 'primary')));
   });
 
-  it('allows the matching atomic decrement and rejects a balance-only update', async () => {
-    await seedTarget('owner');
-    const db = testEnvironment.authenticatedContext('owner').firestore();
-    const targetRef = doc(db, 'users', 'owner', 'targets', 'primary');
-    const eventRef = doc(db, 'users', 'owner', 'targets', 'primary', 'decrements', 'event-one');
+  it('allows any signed-in visitor to make a matching atomic decrement and rejects a balance-only update', async () => {
+    await seedTarget();
+    const db = testEnvironment.authenticatedContext('visitor').firestore();
+    const targetRef = doc(db, 'app', 'primary');
+    const eventRef = doc(db, 'app', 'primary', 'decrements', 'event-one');
 
     await assertFails(updateDoc(targetRef, { remainingUnits: 9, updatedAt: serverTimestamp() }));
 
@@ -79,7 +79,7 @@ describe('Firestore target rules', () => {
           recordedAt: serverTimestamp(),
           previousRemainingUnits,
           newRemainingUnits: previousRemainingUnits - 3,
-          actorUid: 'owner'
+          actorUid: 'visitor'
         });
         transaction.update(targetRef, {
           remainingUnits: previousRemainingUnits - 3,
@@ -95,9 +95,9 @@ describe('Firestore target rules', () => {
   });
 
   it('rejects an event without the matching target update and immutable event edits', async () => {
-    await seedTarget('owner');
-    const db = testEnvironment.authenticatedContext('owner').firestore();
-    const eventRef = doc(db, 'users', 'owner', 'targets', 'primary', 'decrements', 'event-two');
+    await seedTarget();
+    const db = testEnvironment.authenticatedContext('visitor').firestore();
+    const eventRef = doc(db, 'app', 'primary', 'decrements', 'event-two');
     const batch = writeBatch(db);
     batch.set(eventRef, {
       amountUnits: 2,
@@ -106,9 +106,41 @@ describe('Firestore target rules', () => {
       recordedAt: serverTimestamp(),
       previousRemainingUnits: 12,
       newRemainingUnits: 10,
-      actorUid: 'owner'
+      actorUid: 'visitor'
     });
     await assertFails(batch.commit());
     await assertFails(updateDoc(eventRef, { reason: 'Sửa lịch sử' }));
+  });
+
+  it('lets any signed-in visitor create the one shared target once', async () => {
+    const db = testEnvironment.authenticatedContext('visitor').firestore();
+    const targetRef = doc(db, 'app', 'primary');
+    const initialTarget = {
+      label: 'Mục tiêu',
+      unit: 'km',
+      targetUnits: 12,
+      remainingUnits: 12,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastEventId: null
+    };
+
+    await assertSucceeds(setDoc(targetRef, initialTarget));
+    await assertFails(setDoc(targetRef, initialTarget));
+  });
+
+  it('lets any signed-in visitor update shared reminder settings', async () => {
+    const db = testEnvironment.authenticatedContext('visitor').firestore();
+    const reminderRef = doc(db, 'app', 'reminders');
+
+    await assertSucceeds(
+      setDoc(reminderRef, {
+        enabled: true,
+        timezone: 'Asia/Ho_Chi_Minh',
+        times: ['09:00'],
+        updatedAt: serverTimestamp()
+      })
+    );
+    await assertSucceeds(getDoc(reminderRef));
   });
 });

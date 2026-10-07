@@ -66,16 +66,16 @@ async function claimSlot(
 }
 
 export async function sendDueReminder(now = new Date()): Promise<ReminderResult> {
-  const ownerUid = process.env.REMINDER_OWNER_UID;
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!ownerUid || !botToken || !chatId) return { status: 'not-configured' };
+  if (!botToken || !chatId) return { status: 'not-configured' };
 
   const { db } = getFirebaseAdmin();
-  const userRef = db.collection('users').doc(ownerUid);
+  const appRef = db.collection('app');
+  const targetRef = appRef.doc('primary');
   const [targetSnapshot, settingsSnapshot] = await Promise.all([
-    userRef.collection('targets').doc('primary').get(),
-    userRef.collection('settings').doc('reminders').get()
+    targetRef.get(),
+    appRef.doc('reminders').get()
   ]);
   if (!targetSnapshot.exists || !settingsSnapshot.exists) return { status: 'disabled' };
 
@@ -87,7 +87,7 @@ export async function sendDueReminder(now = new Date()): Promise<ReminderResult>
   const dueTimes = [...settings.times].sort().filter((time) => time <= clock.time);
   if (dueTimes.length === 0) return { status: 'not-due' };
 
-  const runs = userRef.collection('notificationRuns');
+  const runs = targetRef.collection('notificationRuns');
   for (const time of dueTimes) {
     const slotId = `${clock.date}_${time.replace(':', '')}`;
     const runRef = runs.doc(slotId);
