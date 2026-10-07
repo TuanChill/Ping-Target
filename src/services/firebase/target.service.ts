@@ -9,6 +9,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -16,7 +17,8 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
-  Timestamp
+  Timestamp,
+  writeBatch
 } from 'firebase/firestore';
 
 import { getFirebaseClient } from '@/lib/firebase/client';
@@ -71,6 +73,7 @@ export async function createTarget(
     unit,
     targetUnits: input.targetUnits,
     remainingUnits: input.targetUnits,
+    historyGeneration: 0,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     lastEventId: null
@@ -108,6 +111,7 @@ export async function recordAchievement(
       const event: DecrementEvent = {
         kind: 'decrement',
         unit: target.unit,
+        generation: target.historyGeneration ?? 0,
         amountUnits: input.amountUnits,
         reason,
         occurredAt: Timestamp.fromDate(input.occurredAt),
@@ -138,7 +142,7 @@ export async function recordAchievement(
 export async function resetTarget(
   uid: string,
   input: { label: string; unit: string; targetUnits: number }
-): Promise<string> {
+): Promise<void> {
   const label = input.label.trim();
   const unit = input.unit.trim();
   if (!Number.isSafeInteger(input.targetUnits) || input.targetUnits <= 0) {
@@ -149,59 +153,67 @@ export async function resetTarget(
   }
 
   const parentRef = targetRef(uid);
-  const eventRef = doc(collection(parentRef, 'decrements'));
-  const eventId = eventRef.id;
+  let nextGeneration = 0;
+  let expectedGeneration = 0;
 
   try {
-    await runTransaction(firestore(), async (transaction) => {
+    nextGeneration = await runTransaction(firestore(), async (transaction) => {
       const targetSnapshot = await transaction.get(parentRef);
       if (!targetSnapshot.exists()) throw new Error('Chưa thiết lập mục tiêu.');
 
       const target = targetSnapshot.data() as Target;
-      if (
-        target.label === label &&
-        target.unit === unit &&
-        target.targetUnits === input.targetUnits &&
-        target.remainingUnits === input.targetUnits
-      ) {
-        throw new Error('Thiết lập mục tiêu mới phải khác thiết lập hiện tại.');
-      }
-
-      const event: TargetResetEvent = {
-        kind: 'reset',
-        previousLabel: target.label,
-        newLabel: label,
-        previousUnit: target.unit,
-        newUnit: unit,
-        previousTargetUnits: target.targetUnits,
-        newTargetUnits: input.targetUnits,
-        previousRemainingUnits: target.remainingUnits,
-        newRemainingUnits: input.targetUnits,
-        recordedAt: Timestamp.now(),
-        actorUid: uid
-      };
-
-      transaction.set(eventRef, { ...event, recordedAt: serverTimestamp() });
+      const generation = (target.historyGeneration ?? 0) + 1;
+      expectedGeneration = generation;
       transaction.update(parentRef, {
         label,
         unit,
         targetUnits: input.targetUnits,
         remainingUnits: input.targetUnits,
-        lastEventId: eventId,
+        historyGeneration: generation,
+        lastEventId: null,
         updatedAt: serverTimestamp()
       });
-    });
 
-    return eventId;
+      return generation;
+    });
   } catch (error) {
-    const eventSnapshot = await getDoc(eventRef).catch(() => null);
-    if (eventSnapshot?.exists()) return eventId;
-    throw error;
+    const targetSnapshot = await getDoc(parentRef).catch(() => null);
+    const target = targetSnapshot?.data() as Target | undefined;
+    if (
+      !expectedGeneration ||
+      !target ||
+      target.historyGeneration !== expectedGeneration ||
+      target.label !== label ||
+      target.unit !== unit ||
+      target.targetUnits !== input.targetUnits
+    ) {
+      throw error;
+    }
+    nextGeneration = expectedGeneration;
+  }
+
+  const historySnapshot = await getDocs(collection(parentRef, 'decrements'));
+  const oldEntries = historySnapshot.docs.filter(
+    (entry) =>
+      ((entry.data() as DecrementEvent | TargetResetEvent).generation ?? 0) < nextGeneration
+  );
+
+  for (let start = 0; start < oldEntries.length; start += 450) {
+    const batch = writeBatch(firestore());
+    oldEntries.slice(start, start + 450).forEach((entry) => batch.delete(entry.ref));
+    try {
+      await batch.commit();
+    } catch {
+      throw new Error(
+        'Target đã được thiết lập lại và lịch sử cũ đã ẩn, nhưng chưa xóa hết bản ghi trên máy chủ. Hãy xác nhận lại để thử dọn tiếp.'
+      );
+    }
   }
 }
 
 export function subscribeHistory(
   uid: string,
+  generation: number,
   onValue: (entries: DecrementHistoryEntry[]) => void,
   onError: (error: Error) => void
 ): () => void {
@@ -215,10 +227,15 @@ export function subscribeHistory(
     historyQuery,
     (snapshot) =>
       onValue(
-        snapshot.docs.map((entry) => ({
-          id: entry.id,
-          ...(entry.data() as DecrementEvent | TargetResetEvent)
-        }))
+        snapshot.docs
+          .filter(
+            (entry) =>
+              ((entry.data() as DecrementEvent | TargetResetEvent).generation ?? 0) === generation
+          )
+          .map((entry) => ({
+            id: entry.id,
+            ...(entry.data() as DecrementEvent | TargetResetEvent)
+          }))
       ),
     onError
   );

@@ -17,7 +17,7 @@ import {
   Target as TargetIcon
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { DecrementHistory } from '@/components/target/decrement-history';
 import { RecordAchievementForm } from '@/components/target/record-achievement-form';
@@ -65,6 +65,8 @@ export function TargetTracker() {
   const [streamError, setStreamError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingSetup, setEditingSetup] = useState(false);
+  const setupDialogRef = useRef<HTMLDialogElement>(null);
+  const historyGeneration = target?.historyGeneration ?? 0;
 
   useEffect(() => {
     if (!user) return;
@@ -81,7 +83,7 @@ export function TargetTracker() {
         setLoaded(true);
       }
     );
-    const stopHistory = subscribeHistory(user.uid, setHistory, () =>
+    const stopHistory = subscribeHistory(user.uid, historyGeneration, setHistory, () =>
       setStreamError('Không thể tải lịch sử tiến độ.')
     );
     const stopReminders = subscribeReminderSettings(user.uid, setReminders, () =>
@@ -93,7 +95,14 @@ export function TargetTracker() {
       stopHistory();
       stopReminders();
     };
-  }, [user, refreshKey]);
+  }, [user, refreshKey, historyGeneration]);
+
+  useEffect(() => {
+    const dialog = setupDialogRef.current;
+    if (!dialog || !editingSetup) return;
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+  }, [editingSetup]);
 
   if (!configured) {
     return (
@@ -238,8 +247,7 @@ export function TargetTracker() {
 
         <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-stone-600">
-            Thiết lập lại tên, con số và đơn vị mục tiêu. Mọi khách sẽ bắt đầu từ 0; lịch sử cũ vẫn
-            được giữ.
+            Thiết lập lại tên, con số và đơn vị mục tiêu; lịch sử tiến độ sẽ được xóa.
           </p>
           <div className="flex shrink-0 flex-col items-start gap-2">
             <Button
@@ -257,8 +265,17 @@ export function TargetTracker() {
         </div>
 
         {editingSetup && (
-          <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6">
-            <h2 className="mb-5 font-semibold text-stone-900">Thiết lập lại mục tiêu</h2>
+          <dialog
+            ref={setupDialogRef}
+            aria-labelledby="setup-target-title"
+            aria-modal="true"
+            onCancel={() => setEditingSetup(false)}
+            onClose={() => setEditingSetup(false)}
+            className="fixed inset-0 m-auto max-h-[90vh] w-[min(42rem,calc(100%-2rem))] overflow-y-auto rounded-3xl border border-stone-200 bg-white p-5 shadow-2xl backdrop:bg-stone-950/50 sm:p-7"
+          >
+            <h2 id="setup-target-title" className="mb-5 font-semibold text-stone-900">
+              Thiết lập lại mục tiêu
+            </h2>
             <TargetSetupForm
               uid={user.uid}
               currentTarget={target}
@@ -268,7 +285,7 @@ export function TargetTracker() {
               }}
               onCancel={() => setEditingSetup(false)}
             />
-          </section>
+          </dialog>
         )}
 
         <div className="mt-5 grid items-start gap-5 lg:grid-cols-[1.08fr_0.92fr]">

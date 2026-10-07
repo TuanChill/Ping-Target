@@ -61,7 +61,7 @@ describe('target tracker', () => {
 
       return () => undefined;
     });
-    subscribeHistoryMock.mockImplementation((_uid, onValue) => {
+    subscribeHistoryMock.mockImplementation((_uid, _generation, onValue) => {
       onValue([]);
 
       return () => undefined;
@@ -72,7 +72,7 @@ describe('target tracker', () => {
       return () => undefined;
     });
     recordAchievementMock.mockResolvedValue('event-id');
-    resetTargetMock.mockResolvedValue('reset-event-id');
+    resetTargetMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -142,18 +142,21 @@ describe('target tracker', () => {
     ).toBeInTheDocument();
   });
 
-  it('lets visitors set up a new shared target and confirms before resetting', async () => {
+  it('opens a modal for visitors to reconfigure the shared target and clear history', async () => {
     const user = userEvent.setup();
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
     render(<TargetTracker />);
 
     await user.click(await screen.findByRole('button', { name: 'Thiết lập lại target' }));
+    expect(
+      await screen.findByRole('dialog', { name: 'Thiết lập lại mục tiêu' })
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Tên mục tiêu')).toHaveValue('Đọc sách');
     expect(screen.getByLabelText('Con số cần đạt')).toHaveValue(100);
     expect(screen.getByLabelText('Đơn vị')).toHaveValue('trang');
+    expect(screen.getByText(/Toàn bộ lịch sử tiến độ sẽ bị xóa/)).toBeInTheDocument();
     await user.clear(screen.getByLabelText('Con số cần đạt'));
     await user.type(screen.getByLabelText('Con số cần đạt'), '80');
-    await user.click(screen.getByRole('button', { name: 'Đặt lại và bắt đầu' }));
+    await user.click(screen.getByRole('button', { name: 'Đồng ý, thiết lập lại' }));
 
     await waitFor(() =>
       expect(resetTargetMock).toHaveBeenCalledWith('private-browser-user', {
@@ -162,6 +165,16 @@ describe('target tracker', () => {
         targetUnits: 80
       })
     );
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('80 trang'));
+  });
+
+  it('leaves the target untouched when the setup modal is cancelled', async () => {
+    const user = userEvent.setup();
+    render(<TargetTracker />);
+
+    await user.click(await screen.findByRole('button', { name: 'Thiết lập lại target' }));
+    await user.click(screen.getByRole('button', { name: 'Hủy' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(resetTargetMock).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ export type Target = {
   unit: string;
   targetUnits: number;
   remainingUnits: number;
+  historyGeneration?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lastEventId: string | null;
@@ -13,6 +14,7 @@ export type Target = {
 export type DecrementEvent = {
   kind?: 'decrement';
   unit?: string;
+  generation?: number;
   amountUnits: number;
   reason: string;
   occurredAt: Timestamp;
@@ -31,6 +33,7 @@ export type ReminderSettings = {
 
 export type TargetResetEvent = {
   kind: 'reset';
+  generation?: number;
   previousLabel?: string;
   newLabel?: string;
   previousUnit?: string;

@@ -112,53 +112,48 @@ describe('Firestore target rules', () => {
     await assertFails(updateDoc(eventRef, { reason: 'Sửa lịch sử' }));
   });
 
-  it('allows a new target setup through a matching reset event and rejects a partial reset', async () => {
+  it('allows a confirmed target reset to clear prior history and rejects partial setup changes', async () => {
     await seedTarget(9);
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'app', 'primary', 'decrements', 'old-event'), {
+        generation: 0
+      });
+    });
     const db = testEnvironment.authenticatedContext('visitor').firestore();
     const targetRef = doc(db, 'app', 'primary');
-    const eventRef = doc(db, 'app', 'primary', 'decrements', 'reset-one');
+    const oldEventRef = doc(db, 'app', 'primary', 'decrements', 'old-event');
 
     await assertFails(
       updateDoc(targetRef, {
-        targetUnits: 7,
-        remainingUnits: 7,
-        lastEventId: 'reset-one',
+        label: 'Đi bộ',
+        targetUnits: 20,
+        remainingUnits: 20,
         updatedAt: serverTimestamp()
       })
     );
 
     await assertSucceeds(
-      runTransaction(db, async (transaction) => {
-        const target = await transaction.get(targetRef);
-        const previousRemainingUnits = target.data()?.remainingUnits as number;
-        transaction.set(eventRef, {
-          kind: 'reset',
-          recordedAt: serverTimestamp(),
-          previousRemainingUnits,
-          newRemainingUnits: 7,
-          previousLabel: 'Mục tiêu',
-          newLabel: 'Đi bộ',
-          previousUnit: 'km',
-          newUnit: 'km',
-          previousTargetUnits: 12,
-          newTargetUnits: 7,
-          actorUid: 'visitor'
-        });
-        transaction.update(targetRef, {
-          label: 'Đi bộ',
-          targetUnits: 7,
-          remainingUnits: 7,
-          lastEventId: 'reset-one',
-          updatedAt: serverTimestamp()
-        });
+      updateDoc(targetRef, {
+        label: 'Đi bộ',
+        targetUnits: 20,
+        remainingUnits: 20,
+        historyGeneration: 1,
+        lastEventId: null,
+        updatedAt: serverTimestamp()
       })
     );
-
-    await assertFails(updateDoc(eventRef, { newRemainingUnits: 10 }));
+    await assertSucceeds(deleteDoc(oldEventRef));
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'app', 'primary', 'decrements', 'current-event'), {
+        generation: 1
+      });
+    });
+    await assertFails(deleteDoc(doc(db, 'app', 'primary', 'decrements', 'current-event')));
     const target = await getDoc(targetRef);
-    expect(target.data()?.remainingUnits).toBe(7);
-    expect(target.data()?.targetUnits).toBe(7);
+    expect(target.data()?.remainingUnits).toBe(20);
+    expect(target.data()?.targetUnits).toBe(20);
     expect(target.data()?.label).toBe('Đi bộ');
+    expect(target.data()?.historyGeneration).toBe(1);
   });
 
   it('lets any signed-in visitor create the one shared target once', async () => {
@@ -169,6 +164,7 @@ describe('Firestore target rules', () => {
       unit: 'km',
       targetUnits: 12,
       remainingUnits: 12,
+      historyGeneration: 0,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       lastEventId: null

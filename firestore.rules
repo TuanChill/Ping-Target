@@ -11,15 +11,18 @@ service cloud.firestore {
 
     function validTarget(data) {
       return data.keys().hasAll([
-          'label', 'unit', 'targetUnits', 'remainingUnits', 'createdAt', 'updatedAt', 'lastEventId'
+          'label', 'unit', 'targetUnits', 'remainingUnits', 'createdAt', 'updatedAt', 'lastEventId',
+          'historyGeneration'
         ])
         && data.keys().hasOnly([
-          'label', 'unit', 'targetUnits', 'remainingUnits', 'createdAt', 'updatedAt', 'lastEventId'
+          'label', 'unit', 'targetUnits', 'remainingUnits', 'createdAt', 'updatedAt', 'lastEventId',
+          'historyGeneration'
         ])
         && data.label is string && data.label.size() > 0 && data.label.size() <= 80
         && data.unit is string && data.unit.size() > 0 && data.unit.size() <= 24
         && data.targetUnits is int && data.targetUnits > 0
         && data.remainingUnits is int && data.remainingUnits >= 0
+        && data.historyGeneration is int && data.historyGeneration >= 0
         && data.createdAt == request.time
         && data.updatedAt == request.time;
     }
@@ -32,25 +35,26 @@ service cloud.firestore {
         && event.previousRemainingUnits == previousRemaining
         && event.newRemainingUnits == nextRemaining
         && event.recordedAt == request.time
-        && (
-          event.get('kind', 'decrement') == 'reset'
-            ? event.get('newTargetUnits', null) == null
-              ? nextRemaining == nextTarget.targetUnits && previousRemaining < nextRemaining
-                && previousTarget.label == nextTarget.label
-                && previousTarget.unit == nextTarget.unit
-                && previousTarget.targetUnits == nextTarget.targetUnits
-              : nextRemaining == nextTarget.targetUnits
-                && event.newTargetUnits == nextTarget.targetUnits
-                && event.newLabel == nextTarget.label
-                && event.newUnit == nextTarget.unit
-                && event.previousTargetUnits == previousTarget.targetUnits
-                && event.previousLabel == previousTarget.label
-                && event.previousUnit == previousTarget.unit
-            : event.get('kind', 'decrement') == 'decrement'
-              && event.amountUnits == previousRemaining - nextRemaining
-              && nextRemaining < previousRemaining
-              && event.get('unit', previousTarget.unit) == previousTarget.unit
-        );
+        && event.get('kind', 'decrement') == 'decrement'
+        && event.amountUnits == previousRemaining - nextRemaining
+        && nextRemaining < previousRemaining
+        && event.get('unit', previousTarget.unit) == previousTarget.unit
+        && event.get('generation', 0) == previousTarget.get('historyGeneration', 0)
+        && nextTarget.get('historyGeneration', 0) == previousTarget.get('historyGeneration', 0);
+    }
+
+    function validTargetReset(previous, next) {
+      return next.diff(previous).affectedKeys().hasOnly([
+          'label', 'unit', 'targetUnits', 'remainingUnits', 'historyGeneration', 'lastEventId', 'updatedAt'
+        ])
+        && next.label is string && next.label.size() > 0 && next.label.size() <= 80
+        && next.unit is string && next.unit.size() > 0 && next.unit.size() <= 24
+        && next.targetUnits is int && next.targetUnits > 0
+        && next.remainingUnits == next.targetUnits
+        && next.historyGeneration is int
+        && next.historyGeneration == previous.get('historyGeneration', 0) + 1
+        && next.lastEventId == null
+        && next.updatedAt == request.time;
     }
 
     function targetMatchesEvent(eventId, data) {
@@ -68,10 +72,11 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'kind',
           'amountUnits', 'reason', 'occurredAt', 'recordedAt',
-          'previousRemainingUnits', 'newRemainingUnits', 'actorUid', 'unit'
+          'previousRemainingUnits', 'newRemainingUnits', 'actorUid', 'unit', 'generation'
         ])
         && data.get('kind', 'decrement') == 'decrement'
         && (!data.keys().hasAny(['unit']) || (data.unit is string && data.unit.size() > 0 && data.unit.size() <= 24))
+        && (!data.keys().hasAny(['generation']) || (data.generation is int && data.generation >= 0))
         && data.amountUnits is int && data.amountUnits > 0
         && data.reason is string && data.reason.size() > 0 && data.reason.size() <= 280
         && data.occurredAt is timestamp && data.occurredAt <= request.time
@@ -80,50 +85,6 @@ service cloud.firestore {
         && data.newRemainingUnits is int && data.newRemainingUnits >= 0
         && data.previousRemainingUnits - data.amountUnits == data.newRemainingUnits
         && data.actorUid == request.auth.uid;
-    }
-
-    function validResetEvent(data) {
-      return data.keys().hasAll([
-          'kind', 'recordedAt', 'previousRemainingUnits', 'newRemainingUnits', 'actorUid'
-        ])
-        && data.keys().hasOnly([
-          'kind', 'recordedAt', 'previousRemainingUnits', 'newRemainingUnits', 'actorUid',
-          'previousLabel', 'newLabel', 'previousUnit', 'newUnit',
-          'previousTargetUnits', 'newTargetUnits'
-        ])
-        && data.kind == 'reset'
-        && data.recordedAt == request.time
-        && data.previousRemainingUnits is int && data.previousRemainingUnits >= 0
-        && data.newRemainingUnits is int && data.newRemainingUnits >= 0
-        && (
-          !data.keys().hasAny([
-            'previousLabel', 'newLabel', 'previousUnit', 'newUnit',
-            'previousTargetUnits', 'newTargetUnits'
-          ])
-          || (
-            data.keys().hasAll([
-              'previousLabel', 'newLabel', 'previousUnit', 'newUnit',
-              'previousTargetUnits', 'newTargetUnits'
-            ])
-            && data.previousLabel is string && data.previousLabel.size() > 0 && data.previousLabel.size() <= 80
-            && data.newLabel is string && data.newLabel.size() > 0 && data.newLabel.size() <= 80
-            && data.previousUnit is string && data.previousUnit.size() > 0 && data.previousUnit.size() <= 24
-            && data.newUnit is string && data.newUnit.size() > 0 && data.newUnit.size() <= 24
-            && data.previousTargetUnits is int && data.previousTargetUnits > 0
-            && data.newTargetUnits is int && data.newTargetUnits > 0
-            && data.newRemainingUnits == data.newTargetUnits
-            && data.previousRemainingUnits <= data.previousTargetUnits
-          )
-        )
-        && (
-          data.keys().hasAny(['newTargetUnits'])
-          || data.newRemainingUnits > data.previousRemainingUnits
-        )
-        && data.actorUid == request.auth.uid;
-    }
-
-    function validEvent(data) {
-      return validDecrementEvent(data) || validResetEvent(data);
     }
 
     match /app/{documentId} {
@@ -138,22 +99,22 @@ service cloud.firestore {
 
       allow update: if documentId == 'primary'
         && request.auth != null
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'label', 'unit', 'targetUnits', 'remainingUnits', 'lastEventId', 'updatedAt'
-        ])
-        && request.resource.data.label is string
-        && request.resource.data.label.size() > 0 && request.resource.data.label.size() <= 80
-        && request.resource.data.unit is string
-        && request.resource.data.unit.size() > 0 && request.resource.data.unit.size() <= 24
-        && request.resource.data.targetUnits is int && request.resource.data.targetUnits > 0
-        && request.resource.data.remainingUnits is int
-        && request.resource.data.remainingUnits >= 0
-        && request.resource.data.lastEventId is string
-        && request.resource.data.updatedAt == request.time
-        && eventMatchesTarget(
-          request.resource.data.lastEventId,
-          resource.data.remainingUnits,
-          request.resource.data.remainingUnits
+        && (
+          validTargetReset(resource.data, request.resource.data)
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'remainingUnits', 'lastEventId', 'updatedAt'
+            ])
+            && request.resource.data.remainingUnits is int
+            && request.resource.data.remainingUnits >= 0
+            && request.resource.data.lastEventId is string
+            && request.resource.data.updatedAt == request.time
+            && eventMatchesTarget(
+              request.resource.data.lastEventId,
+              resource.data.remainingUnits,
+              request.resource.data.remainingUnits
+            )
+          )
         );
 
       allow create, update: if documentId == 'reminders'
@@ -172,9 +133,13 @@ service cloud.firestore {
         allow read: if documentId == 'primary' && request.auth != null;
         allow create: if documentId == 'primary'
           && request.auth != null
-          && validEvent(request.resource.data)
+          && validDecrementEvent(request.resource.data)
           && targetMatchesEvent(eventId, request.resource.data);
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if documentId == 'primary'
+          && request.auth != null
+          && resource.data.get('generation', 0) is int
+          && resource.data.get('generation', 0) < get(targetPath()).data.get('historyGeneration', 0);
       }
     }
   }

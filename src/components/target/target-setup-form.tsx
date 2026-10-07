@@ -24,15 +24,6 @@ export function TargetSetupForm({ uid, onCreated, currentTarget, onCancel }: Tar
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const input = { label, unit, targetUnits: Number(target) };
-    if (
-      currentTarget &&
-      !window.confirm(
-        `Thiết lập lại target dùng chung thành “${label}” — ${Number(target).toLocaleString('vi-VN')} ${unit}? Mọi khách truy cập sẽ thấy thiết lập mới và tiến độ bắt đầu từ 0. Lịch sử cũ vẫn được giữ.`
-      )
-    ) {
-      return;
-    }
-
     setSaving(true);
     setError(null);
     try {
@@ -50,7 +41,8 @@ export function TargetSetupForm({ uid, onCreated, currentTarget, onCancel }: Tar
     <form onSubmit={handleSubmit} className="space-y-5">
       {currentTarget && (
         <p className="text-sm leading-6 text-stone-600">
-          Cập nhật tên, con số và đơn vị. Tiến độ sẽ bắt đầu lại từ 0, còn lịch sử cũ sẽ được giữ.
+          Mọi khách sẽ thấy thiết lập mới và tiến độ bắt đầu từ 0. Toàn bộ lịch sử tiến độ sẽ bị
+          xóa.
         </p>
       )}
       <div>
@@ -113,7 +105,11 @@ export function TargetSetupForm({ uid, onCreated, currentTarget, onCancel }: Tar
           disabled={saving}
           className="h-12 flex-1 rounded-xl bg-stone-950 text-white hover:bg-stone-800"
         >
-          {saving ? 'Đang lưu…' : currentTarget ? 'Đặt lại và bắt đầu' : 'Bắt đầu theo dõi'}
+          {saving
+            ? 'Đang thiết lập lại…'
+            : currentTarget
+              ? 'Đồng ý, thiết lập lại'
+              : 'Bắt đầu theo dõi'}
         </Button>
       </div>
     </form>
